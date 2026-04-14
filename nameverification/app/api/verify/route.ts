@@ -5,7 +5,11 @@ import {
   type ResponseSchema,
 } from "@google/generative-ai";
 
-import { assessDeterministicTier, verifierSignalsForLlm } from "@/lib/nameVerifier";
+import {
+  assessDeterministicTier,
+  NICKNAME_TABLE,
+  verifierSignalsForLlm,
+} from "@/lib/nameVerifier";
 
 /** Gemini structured output: enforced via `generationConfig.responseSchema`. */
 const VERIFY_RESPONSE_SCHEMA: ResponseSchema = {
@@ -58,11 +62,19 @@ export async function POST(request: Request) {
     return NextResponse.json({
       match: true,
       confidence: 1,
-      reason: "Names are identical after normalization.",
+      reason: deterministic.reason,
     });
   }
 
-  if (deterministic.tier === "tier2_no_match") {
+  if (deterministic.tier === "tier2_nickname_match") {
+    return NextResponse.json({
+      match: true,
+      confidence: 0.95,
+      reason: deterministic.reason,
+    });
+  }
+
+  if (deterministic.tier === "tier3_no_match") {
     return NextResponse.json({
       match: false,
       confidence: deterministic.score,
@@ -83,12 +95,21 @@ export async function POST(request: Request) {
     process.env.GEMINI_MODEL?.trim() ||
     "gemini-2.0-flash";
 
+  const nicknameTableForPrompt = JSON.stringify(NICKNAME_TABLE);
   const systemPrompt = `You are a name verification system. Decide whether two names refer to the same person, accounting for real-world spelling and formatting variation.
 
 Rules:
 - Consider typos, transpositions, transliteration, phonetic similarity, optional particles, hyphenation vs spaces, compound names split or merged, and Mc/Mac-style prefixes when judging sameness.
 - Treat clearly different given names, gendered name pairs, distinct names that only share a prefix, different surname roots, or reorderings that imply a different person as non-matches.
 - Token order matters when it changes which part is the given name vs family name in context.
+- Only match nicknames that a typical person today would immediately recognize as the same name. If a name has become independent and is commonly used on its own (like Jack, Liam, Lisa, Sally, Molly), treat it as a distinct name even if it historically derived from another name.
+- Test for nickname equivalence: if someone introduced themselves as Name A, would most people assume their legal name is Name B? If not, do not match them.
+- If the names are too dissimilar overall, always return match=false.
+- For nickname matching, use ONLY this table. If a name is a key in this table and the other name is one of its values, they are the same person. If a nickname relationship is not in this table, do not match based on nickname. Do not use any nickname knowledge beyond this table.
+- If your decision depends on nickname equivalence and that nickname pair is not explicitly present in the table, return match=false.
+
+Nickname table (JSON):
+${nicknameTableForPrompt}
 
 Reply using only the structured JSON output: match (boolean), confidence (0–1), reason (short string). No markdown or extra text.`;
 

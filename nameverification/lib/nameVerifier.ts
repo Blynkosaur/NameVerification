@@ -1,4 +1,10 @@
-export type DeterministicTier = "tier1_match" | "tier2_no_match" | "tier3_tiebreaker";
+import nicknameTableJson from "@/lib/nicknameTable.json";
+
+export type DeterministicTier =
+  | "tier1_match"
+  | "tier2_nickname_match"
+  | "tier3_no_match"
+  | "tier4_llm";
 
 export type DeterministicAssessment = {
   tier: DeterministicTier;
@@ -8,6 +14,7 @@ export type DeterministicAssessment = {
 };
 
 const PARTICLES = new Set(["al", "ibn", "bin", "el", "von", "de", "van", "del", "la", "le"]);
+export const NICKNAME_TABLE = nicknameTableJson as Record<string, string[]>;
 
 function clamp01(value: number): number {
   return Math.max(0, Math.min(1, Number(value.toFixed(3))));
@@ -67,21 +74,21 @@ function tier1FormattingMatch(candidateNorm: string, targetNorm: string): boolea
   return cCompact.length > 0 && cCompact === tCompact;
 }
 
-function isShortFormTokenPair(aToken: string, bToken: string): boolean {
+function isNicknameTokenPair(aToken: string, bToken: string): boolean {
   if (aToken === bToken) return true;
-  const a = aToken;
-  const b = bToken;
-  const shorter = a.length <= b.length ? a : b;
-  const longer = a.length > b.length ? a : b;
-  // Keep this conservative: require a meaningful short token.
-  return shorter.length >= 3 && longer.startsWith(shorter);
+  const aMatches = NICKNAME_TABLE[aToken]?.includes(bToken) ?? false;
+  const bMatches = NICKNAME_TABLE[bToken]?.includes(aToken) ?? false;
+  return aMatches || bMatches;
 }
 
-function isShortFormNameMatch(candTokens: string[], targTokens: string[]): boolean {
+function allTokenPairsResolveWithNicknameTable(
+  candTokens: string[],
+  targTokens: string[],
+): boolean {
   if (candTokens.length === 0 || targTokens.length === 0) return false;
   if (candTokens.length !== targTokens.length) return false;
   for (let i = 0; i < candTokens.length; i += 1) {
-    if (!isShortFormTokenPair(candTokens[i] ?? "", targTokens[i] ?? "")) {
+    if (!isNicknameTokenPair(candTokens[i] ?? "", targTokens[i] ?? "")) {
       return false;
     }
   }
@@ -94,14 +101,14 @@ export function assessDeterministicTier(candidate: string, target: string): Dete
 
   if (!normalizedTarget) {
     return {
-      tier: "tier2_no_match",
+      tier: "tier3_no_match",
       score: 0,
       reason: "No target name has been generated yet.",
     };
   }
   if (!normalizedCandidate) {
     return {
-      tier: "tier2_no_match",
+      tier: "tier3_no_match",
       score: 0,
       reason: "Candidate name is empty after normalization.",
     };
@@ -109,18 +116,7 @@ export function assessDeterministicTier(candidate: string, target: string): Dete
 
   const candTokens = parseNameTokens(candidate);
   const targTokens = parseNameTokens(target);
-  const eitherSingleToken =
-    candTokens.length === 1 || targTokens.length === 1;
-
-  if (isShortFormNameMatch(candTokens, targTokens)) {
-    return {
-      tier: "tier1_match",
-      score: 1,
-      reason: "Names match via short-form token expansion.",
-    };
-  }
-
-  if (!eitherSingleToken && tier1FormattingMatch(normalizedCandidate, normalizedTarget)) {
+  if (tier1FormattingMatch(normalizedCandidate, normalizedTarget)) {
     return {
       tier: "tier1_match",
       score: 1,
@@ -128,19 +124,19 @@ export function assessDeterministicTier(candidate: string, target: string): Dete
     };
   }
 
-  const fullJw = jaroWinkler(normalizedCandidate, normalizedTarget);
-
-  if (eitherSingleToken) {
+  if (allTokenPairsResolveWithNicknameTable(candTokens, targTokens)) {
     return {
-      tier: "tier3_tiebreaker",
-      score: clamp01(fullJw),
-      reason: "At least one name is a single token; using model judgment.",
+      tier: "tier2_nickname_match",
+      score: 0.95,
+      reason: "Names match via nickname table token mapping.",
     };
   }
 
+  const fullJw = jaroWinkler(normalizedCandidate, normalizedTarget);
+
   if (isStrictTokenOrderSwap(candTokens, targTokens)) {
     return {
-      tier: "tier2_no_match",
+      tier: "tier3_no_match",
       score: clamp01(fullJw),
       reason:
         "Name tokens match but order differs; not treated as the same identity.",
@@ -151,14 +147,14 @@ export function assessDeterministicTier(candidate: string, target: string): Dete
 
   if (fullJw < 0.5 && !shareToken) {
     return {
-      tier: "tier2_no_match",
+      tier: "tier3_no_match",
       score: clamp01(fullJw),
       reason: "Names are too dissimilar.",
     };
   }
 
   return {
-    tier: "tier3_tiebreaker",
+    tier: "tier4_llm",
     score: clamp01(fullJw),
     reason: "Requires model judgment.",
   };
