@@ -99,6 +99,9 @@ export async function POST(request: Request) {
   const systemPrompt = `You are a name verification system. Decide whether two names refer to the same person, accounting for real-world spelling and formatting variation.
 
 Rules:
+- Two names match ONLY if:
+  1. They are the same name with typos, transliteration, or phonetic spelling differences
+  2. One is a nickname of the other AND that exact relationship exists in the provided nickname table
 - Consider typos, transpositions, transliteration, phonetic similarity, optional particles, hyphenation vs spaces, compound names split or merged, and Mc/Mac-style prefixes when judging sameness.
 - Treat clearly different given names, gendered name pairs, distinct names that only share a prefix, different surname roots, or reorderings that imply a different person as non-matches.
 - Token order matters when it changes which part is the given name vs family name in context.

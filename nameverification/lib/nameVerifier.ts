@@ -95,6 +95,55 @@ function allTokenPairsResolveWithNicknameTable(
   return true;
 }
 
+function isUnlistedPrefixExpansionPair(aToken: string, bToken: string): boolean {
+  if (aToken === bToken) return false;
+  if (isNicknameTokenPair(aToken, bToken)) return false;
+  const shorter = aToken.length <= bToken.length ? aToken : bToken;
+  const longer = aToken.length > bToken.length ? aToken : bToken;
+  // Conservative "same prefix but distinct name" guard (e.g. christian/christopher).
+  return shorter.length >= 4 && longer.startsWith(shorter) && longer.length - shorter.length >= 2;
+}
+
+function longestCommonPrefixLength(a: string, b: string): number {
+  const max = Math.min(a.length, b.length);
+  let i = 0;
+  while (i < max && a[i] === b[i]) {
+    i += 1;
+  }
+  return i;
+}
+
+function isUnlistedSameRootVariantPair(aToken: string, bToken: string): boolean {
+  if (aToken === bToken) return false;
+  if (isNicknameTokenPair(aToken, bToken)) return false;
+
+  const lcp = longestCommonPrefixLength(aToken, bToken);
+  if (lcp < 5) return false;
+
+  const aSuffix = aToken.slice(lcp);
+  const bSuffix = bToken.slice(lcp);
+  // If both names diverge with meaningful endings, treat as distinct names.
+  return aSuffix.length >= 2 && bSuffix.length >= 2;
+}
+
+function hasUnlistedPrefixExpansion(
+  candTokens: string[],
+  targTokens: string[],
+): boolean {
+  if (candTokens.length !== targTokens.length) return false;
+  for (let i = 0; i < candTokens.length; i += 1) {
+    const a = candTokens[i] ?? "";
+    const b = targTokens[i] ?? "";
+    if (
+      isUnlistedPrefixExpansionPair(a, b) ||
+      isUnlistedSameRootVariantPair(a, b)
+    ) {
+      return true;
+    }
+  }
+  return false;
+}
+
 export function assessDeterministicTier(candidate: string, target: string): DeterministicAssessment {
   const normalizedCandidate = normalizeForVerify(candidate);
   const normalizedTarget = normalizeForVerify(target);
@@ -133,6 +182,14 @@ export function assessDeterministicTier(candidate: string, target: string): Dete
   }
 
   const fullJw = jaroWinkler(normalizedCandidate, normalizedTarget);
+
+  if (hasUnlistedPrefixExpansion(candTokens, targTokens)) {
+    return {
+      tier: "tier3_no_match",
+      score: clamp01(fullJw),
+      reason: "Names share a prefix but are distinct names (not in nickname table).",
+    };
+  }
 
   if (isStrictTokenOrderSwap(candTokens, targTokens)) {
     return {
