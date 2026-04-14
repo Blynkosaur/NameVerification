@@ -1,36 +1,41 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# Target name generator
 
-## Getting Started
+Small [Next.js](https://nextjs.org) app: you describe what kind of name you want in plain language, and **Google Gemini** returns a single **target name** string. The API key stays on the server.
 
-First, run the development server:
+## How to run
+
+From this directory (`nameverification/`):
+
+```bash
+npm install
+```
+
+Create `.env.local` with your Gemini API key ([Google AI Studio](https://aistudio.google.com/apikey)):
+
+```bash
+GEMINI_API_KEY=your_key_here
+```
+
+Optional — override the model (default is `gemini-2.0-flash`):
+
+```bash
+GEMINI_MODEL=gemini-2.0-flash
+```
+
+Start the dev server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Open [http://localhost:3000](http://localhost:3000). Enter a prompt, click **Generate**, and the **Target name** section shows the model’s one-line reply.
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+Other commands: `npm run build` (production build), `npm run start` (run the built app), `npm run lint`.
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+## How it works
 
-## Learn More
+1. **Frontend** (`app/page.tsx`): A client form collects your prompt and `POST`s JSON `{ "prompt": "..." }` to `/api/generate`.
+2. **API route** (`app/api/generate/route.ts`): Validates the body, reads `GEMINI_API_KEY`, and calls the Gemini SDK with a fixed system instruction so the model answers with **exactly one name**, one line, no extra text. The handler trims the response and uses the first line as `targetName`.
+3. **Response**: `{ "targetName": string }` on success, or `{ "error": string }` with an HTTP error status if something is misconfigured or the request fails.
 
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+Env files can live in this folder (e.g. `.env.local`) or in the parent repo directory; `next.config.ts` loads env from the parent as well so a key at the monorepo root can work for local development.
