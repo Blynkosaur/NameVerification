@@ -2,3 +2,7 @@
 .env
 .env.local
 .env.*.local
+
+# Cursor / agent local instructions
+AGENTS.md
+CLAUDE.md
