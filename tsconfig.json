@@ -1,0 +1,10 @@
+{
+  "extends": "./nameverification/tsconfig.json",
+  "include": [
+    "nameverification/**/*.ts",
+    "nameverification/**/*.tsx",
+    "nameverification/.next/types/**/*.ts",
+    "nameverification/.next/dev/types/**/*.ts"
+  ],
+  "exclude": ["nameverification/node_modules"]
+}

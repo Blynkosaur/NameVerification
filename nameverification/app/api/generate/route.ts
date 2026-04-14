@@ -3,7 +3,17 @@ import { NextResponse } from "next/server";
 
 const SYSTEM_INSTRUCTION = `You are a name generator. Follow the user's instructions exactly.
 Reply with exactly one target name: a single string on one line.
+Use only the Latin alphabet characters (A-Z), plus spaces between words.
 No quotes, labels, markdown, or explanation—only the name text.`;
+
+function enforceLatinAlphabetName(raw: string): string {
+  return raw
+    .normalize("NFD")
+    .replace(/[\u0300-\u036f]/g, "")
+    .replace(/[^A-Za-z\s]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
 export async function POST(request: Request) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -53,14 +63,15 @@ export async function POST(request: Request) {
 
     const result = await model.generateContent(prompt);
     const text = result.response.text();
-    const targetName = text
+    const modelOutput = text
       .trim()
       .split(/\r?\n/)[0]
       ?.trim() ?? "";
+    const targetName = enforceLatinAlphabetName(modelOutput);
 
     if (!targetName) {
       return NextResponse.json(
-        { error: "Model returned an empty name." },
+        { error: "Model returned no valid Latin-alphabet name." },
         { status: 502 },
       );
     }
